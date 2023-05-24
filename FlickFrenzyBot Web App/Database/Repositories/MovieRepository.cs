@@ -10,7 +10,7 @@ namespace FlickFrenzyBot_Web_App.Database.Repositories
         {
         }
 
-        public Movie GetByTitle(string title)
+        public Movie? GetByTitle(string title)
         {
             return _dbSet.FirstOrDefault(e => e.Title == title);
         }

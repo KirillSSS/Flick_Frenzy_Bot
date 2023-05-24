@@ -7,12 +7,11 @@ using FlickFrenzyBot_Web_App.Entities;
 
 namespace FlickFrenzyBot_Web_App.Services
 {
-    public class OMDbRequestService : IRequestService
+    public class OMDbRequestService : IOMDbRequestService
     {
         private readonly HttpClient _httpClient;
-        private readonly string _apiUrl;
-        private readonly string _apiKey;
-        private readonly string _badUrl;
+        private readonly string? _apiUrl;
+        private readonly string? _apiKey;
         private readonly BotDbContext _dbContext; 
         private readonly IMovieRepository _movieRepository; 
 
@@ -21,41 +20,29 @@ namespace FlickFrenzyBot_Web_App.Services
             _httpClient = httpClient;
             _apiUrl = configuration["OMDbApi:ApiUrl"];
             _apiKey = configuration["OMDbApi:ApiKey"];
-            _badUrl = configuration["OMDbApi:BadUrl"];
             _dbContext = dbContext;
             _movieRepository = new MovieRepository(_dbContext);
         }
 
-        public async Task<(string PosterUrl, string Info)> GetResponseAsync(string message)
+        public async Task<(bool isCorrect, Movie? outMovie)> GetMovieAsync(string name)
         {
-            Console.WriteLine(message);
+            var movie = _movieRepository.GetByTitle(name);
 
-            var request = new HttpRequestMessage(HttpMethod.Get, $"{_apiUrl}?apikey={_apiKey}&t={message}");
+            if (movie is not null)
+                return (true, movie);
+
+            var request = new HttpRequestMessage(HttpMethod.Get, $"{_apiUrl}?apikey={_apiKey}&t={name}");
 
             var response = await _httpClient.SendAsync(request);
             var responseContent = await response.Content.ReadAsStringAsync();
 
-            var movie = JsonSerializer.Deserialize<Movie>(responseContent);
-            var output = "";
+            movie = JsonSerializer.Deserialize<Movie>(responseContent);
 
             if (movie is null || movie.Response == "False")
-                return (_badUrl, "Sorry, there is no such film");
+                return (false, null);
 
-            var movieRepo = new MovieRepository(_dbContext);
-
-            if (movieRepo.GetByTitle(movie.Title) is null)
-                movieRepo.Create(movie);
-
-            var rating = "";
-
-            foreach (var property in movie.Ratings)
-            {
-                rating += $"    {property.Source}: {property.Value}\n";
-            }
-
-            output = $"{movie.Title}: \n{rating}";
-
-            return (movie.Poster, output);
+            _movieRepository.Create(movie);
+            return (true, movie);
         }
     }
 }

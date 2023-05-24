@@ -2,8 +2,8 @@
 
 namespace FlickFrenzyBot_Web_App.Abstractions
 {
-    public interface IMovieRepository : IRepository<Movie>
+    public interface IRatingRepository
     {
-        Movie? GetByTitle(string title);
+        List<Rating> GetAllByMovieId(int movieId);
     }
 }

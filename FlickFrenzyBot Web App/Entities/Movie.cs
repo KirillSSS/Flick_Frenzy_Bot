@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations.Schema;
+﻿using Microsoft.AspNetCore.Razor.TagHelpers;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace FlickFrenzyBot_Web_App.Entities
 {
@@ -20,5 +21,15 @@ namespace FlickFrenzyBot_Web_App.Entities
 
         [NotMapped]
         public string Response { get; set; }
+
+        public string GetShortInfo()
+        {
+            var output = $"{Title}: \n\n";
+
+            foreach (var rating in Ratings)
+                output += $"    {rating.Source}: {rating.Value}\n\n";
+
+            return output;
+        }
     }
 }
