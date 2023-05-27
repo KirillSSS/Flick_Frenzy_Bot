@@ -31,5 +31,51 @@ namespace FlickFrenzyBot_Web_App.Entities
 
             return output;
         }
+
+        public string GetPlotInfo()
+        {
+            var output = Genre != "N/A" ? $"Genre: \n{Genre} \n\n" : $"Genre: Sorry, I have no info about it \n\n";
+            output += Plot != "N/A" ? $"Plot: \n{Plot}\n\n" : $"Plot: Sorry, I have no info about it \n\n";
+            return output;
+        }
+
+        public string GetGeneralInfo()
+        {
+            var output = Released != "N/A" ? $"Released: {Released} \n\n" : $"Released: Sorry, I have no info about it \n\n";
+            output += Rated != "N/A" ? $"Rated: {Rated}\n\n" : $"Rated: Sorry, I have no info about it \n\n";
+            output += Runtime != "N/A" ? $"Runtime: {Runtime}\n\n" : $"Runtime: Sorry, I have no info about it \n\n";
+            return output;
+        }
+
+        public string GetFilmmakersInfo()
+        {
+            var output = Director != "N/A" ? $"Director: \n{Director} \n\n" : $"Director: Sorry, I have no info about it \n\n";
+            output += Actors != "N/A" ? $"Actors: \n{Actors}\n\n" : $"Actors: Sorry, I have no info about it \n\n";
+            return output;
+        }
+
+        public string GetAwardsInfo()
+        {
+            var output = $"Rating: \n";
+
+            foreach (var rating in Ratings)
+                output += $"{rating.Source}: {rating.Value}\n\n";
+
+            output += Awards != "N/A" ? $"Awards: \n{Awards} \n\n" : $"Awards: Sorry, I have no info about it \n\n";
+
+            return output;
+        }
+
+        public string GetCompleteInfo()
+        {
+            var output = Released != "N/A" ? $"{Title} ({Released}): \n" : $"{Title}: \n";
+
+            output += $"{Rated} - {Runtime}\n\n";
+            output += GetPlotInfo();
+            output += GetFilmmakersInfo();
+            output += GetAwardsInfo();
+
+            return output;
+        }
     }
 }

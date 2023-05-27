@@ -9,6 +9,7 @@ using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace FlickFrenzyBot_Web_App.Services
 {
@@ -18,8 +19,10 @@ namespace FlickFrenzyBot_Web_App.Services
         private readonly BotDbContext _dbContext;
         private readonly IConfiguration _configuration;
         private readonly IRatingRepository _ratingRepository;
+        private readonly IMovieRepository _movieRepository;
 
-        Movie? _currentMovie;
+        int _currentMovieId = 0;
+        int _currentMessageId = 0;
 
         public TelegramBotService(IOMDbRequestService omdbRequestService, BotDbContext dbContext, IConfiguration configuration)
         {
@@ -27,6 +30,7 @@ namespace FlickFrenzyBot_Web_App.Services
             _dbContext = dbContext;
             _configuration = configuration;
             _ratingRepository = new RatingRepository(_dbContext);
+            _movieRepository = new MovieRepository(_dbContext);
         }
 
         public async Task HandleMessage(ITelegramBotClient botClient, Message message)
@@ -49,20 +53,32 @@ namespace FlickFrenzyBot_Web_App.Services
             }
             else
             {
-                _currentMovie = movie;
-                _currentMovie.Ratings = _ratingRepository.GetAllByMovieId(_currentMovie.Id);
+                _currentMovieId = movie.Id;
 
-                Message sentMessage = await botClient.SendPhotoAsync(
-                    chatId: message.Chat.Id,
-                    photo: InputFile.FromUri(movie.Poster),
-                    caption: _currentMovie.GetShortInfo(),
-                    replyToMessageId: message.MessageId,
-                    replyMarkup: new InlineKeyboardMarkup(new[]
+                if (movie.Ratings is null)
+                    movie.Ratings = _ratingRepository.GetAllByMovieId(movie.Id);
+
+                Console.WriteLine(movie.Poster == "N/A");
+
+                if (movie.Poster is null)
+                {
+                    _ = await SendMessageAsync(botClient, message.Chat.Id, movie.GetShortInfo(), message.MessageId);
+                }
+                else
+                {
+                    Message sentMessage = await botClient.SendPhotoAsync(
+                        chatId: message.Chat.Id,
+                        photo: InputFile.FromUri(movie.Poster),
+                        caption: movie.GetShortInfo(),
+                        replyToMessageId: message.MessageId,
+                        replyMarkup: new InlineKeyboardMarkup(new[]
                         {
-                            InlineKeyboardButton.WithCallbackData("👍", "hello"),
-                            InlineKeyboardButton.WithCallbackData("👎", "bye")
+                        InlineKeyboardButton.WithCallbackData("👍", "hello"),
+                        InlineKeyboardButton.WithCallbackData("👎", "bye")
                         })
-                );
+                    );
+                    _currentMessageId = sentMessage.MessageId;
+                }
             }
         }
 
@@ -74,10 +90,7 @@ namespace FlickFrenzyBot_Web_App.Services
         {
             if (message.Text == "/start")
             {
-                Message WelcomeMessage = await botClient.SendTextMessageAsync(
-                    chatId: message.Chat.Id,
-                    text: GetConfig("Messages:WelcomeMessage")
-                );
+                _ = await SendMessageAsync(botClient, message.Chat.Id, GetConfig("Messages:WelcomeMessage"), message.MessageId);
                 return true;
             }
 
@@ -85,14 +98,77 @@ namespace FlickFrenzyBot_Web_App.Services
             {
                 ReplyKeyboardMarkup keyboard = new(new[]
                 {
-                    new KeyboardButton[] { "/more", "/poster" }
+                    new KeyboardButton[] { "/detailed" },
+                    new KeyboardButton[] { "/plot", "/filmmakers" },
+                    new KeyboardButton[] { "/general", "/awards" }
                 })
                 {
                     ResizeKeyboard = true
                 };
+                await botClient.SendTextMessageAsync(message.Chat.Id, "Now, you can choose from the menu )", replyMarkup: keyboard);
                 return true;
             }
+
+            if (message.Text == "/detailed")
+            {
+                if (_currentMovieId != 0 && _currentMessageId != 0)
+                    _ = await SendMessageAsync(botClient, message.Chat.Id, _movieRepository.GetById(_currentMovieId).GetCompleteInfo(), _currentMessageId);
+                else
+                    _ = await SendMessageAsync(botClient, message.Chat.Id, "Sorry, but you didn't mention a movie", message.MessageId);
+                return true;
+            }
+
+            if (message.Text == "/plot")
+            {
+                if (_currentMovieId != 0 && _currentMessageId != 0)
+                    _ = await SendMessageAsync(botClient, message.Chat.Id, _movieRepository.GetById(_currentMovieId).GetPlotInfo(), _currentMessageId);
+                else
+                    _ = await SendMessageAsync(botClient, message.Chat.Id, "Sorry, but you didn't mention a movie", message.MessageId);
+                return true;
+            }
+
+            if (message.Text == "/filmmakers")
+            {
+                if (_currentMovieId != 0 && _currentMessageId != 0)
+                    _ = await SendMessageAsync(botClient, message.Chat.Id, _movieRepository.GetById(_currentMovieId).GetFilmmakersInfo(), _currentMessageId);
+                else
+                    _ = await SendMessageAsync(botClient, message.Chat.Id, "Sorry, but you didn't mention a movie", message.MessageId);
+                return true;
+            }
+
+            if (message.Text == "/general")
+            {
+                if (_currentMovieId != 0 && _currentMessageId != 0)
+                    _ = await SendMessageAsync(botClient, message.Chat.Id, _movieRepository.GetById(_currentMovieId).GetGeneralInfo(), _currentMessageId);
+                else
+                    _ = await SendMessageAsync(botClient, message.Chat.Id, "Sorry, but you didn't mention a movie", message.MessageId);
+                return true;
+            }
+
+            if (message.Text == "/awards")
+            {
+                var movie = _movieRepository.GetById(_currentMovieId);
+                movie.Ratings = _ratingRepository.GetAllByMovieId(movie.Id);
+
+                if (_currentMovieId != 0 && _currentMessageId != 0)
+                    _ = await SendMessageAsync(botClient, message.Chat.Id, _movieRepository.GetById(_currentMovieId).GetAwardsInfo(), _currentMessageId);
+                else
+                    _ = await SendMessageAsync(botClient, message.Chat.Id, "Sorry, but you didn't mention a movie", message.MessageId);
+                return true;
+            }
+
             return false;
+        }
+
+        private async Task<int> SendMessageAsync(ITelegramBotClient botClient, long chatID, string message, int replyMessageID)
+        {
+            Message sentMessage = await botClient.SendTextMessageAsync(
+                chatId: chatID,
+                text: message,
+                replyToMessageId: replyMessageID
+            );
+
+            return sentMessage.MessageId;
         }
 
         private string GetConfig(string parameter)
@@ -102,59 +178,5 @@ namespace FlickFrenzyBot_Web_App.Services
             else
                 return _configuration[parameter];
         }
-
-        //protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-        //{
-        //    var receiverOptions = new ReceiverOptions
-        //    {
-        //        AllowedUpdates = Array.Empty<UpdateType>()
-        //    };
-
-        //    _botClient.StartReceiving(
-        //        updateHandler: HandleUpdateAsync,
-        //        pollingErrorHandler: HandleErrorAsync,
-        //        receiverOptions: receiverOptions,
-        //        cancellationToken: stoppingToken
-        //    );
-
-        //    var me = await _botClient.GetMeAsync(stoppingToken);
-        //    Console.WriteLine($"Start listening for @{me.Username}");
-
-        //    await Task.Delay(Timeout.Infinite, stoppingToken);
-        //}
-
-        //private async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
-        //{
-        //    if (update.Message is not { } message)
-        //        return;
-
-        //    if (message.Text is not { } messageText)
-        //        return;
-
-        //    var chatId = message.Chat.Id;
-
-        //    Console.WriteLine($"Okay, now, I am talking in chat {chatId} and the message is: '{messageText}'");
-
-        //    var (posterUrl, info) = await _omdbRequestService.GetResponseAsync(messageText);
-
-        //    Message sentMessage = await botClient.SendPhotoAsync(
-        //        chatId: chatId,
-        //        photo: InputFile.FromUri(posterUrl),
-        //        caption: info,
-        //        cancellationToken: cancellationToken
-        //    );
-        //}
-
-        //private Task HandleErrorAsync(ITelegramBotClient botClient, Exception ex, CancellationToken cancellationToken)
-        //{
-        //    var errorMessage = ex switch
-        //    {
-        //        ApiRequestException apiRequestException => $"Telegram API Error:\n[{apiRequestException.ErrorCode}]\n{apiRequestException.Message}",
-        //        _ => ex.ToString(),
-        //    };
-
-        //    Console.WriteLine(errorMessage);
-        //    return Task.CompletedTask;
-        //}
     }
 }

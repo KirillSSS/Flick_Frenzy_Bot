@@ -41,6 +41,11 @@ namespace FlickFrenzyBot_Web_App.Services
             if (movie is null || movie.Response == "False")
                 return (false, null);
 
+            movie = _movieRepository.GetByTitle(movie.Title);
+
+            if (movie is not null)
+                return (true, movie);
+
             _movieRepository.Create(movie);
             return (true, movie);
         }

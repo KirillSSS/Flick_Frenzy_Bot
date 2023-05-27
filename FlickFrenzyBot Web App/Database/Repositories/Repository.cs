@@ -19,6 +19,15 @@ public class Repository<T> : IRepository<T> where T : class
         return _dbSet.Find(id);
     }
 
+    public void DeleteById(int id)
+    {
+        var entity = _dbSet.Find(id);
+        if (entity != null)
+        {
+            Delete(entity);  
+        }
+    }
+
     public void Update(T entity)
     {
         _dbContext.Entry(entity).State = EntityState.Modified;
@@ -33,11 +42,12 @@ public class Repository<T> : IRepository<T> where T : class
 
     public void Delete(T entity)
     {
-        throw new NotImplementedException();
+        _dbSet.Remove(entity);
+        _dbContext.SaveChanges();
     }
 
     public IEnumerable<T> GetAll()
     {
-        throw new NotImplementedException();
+        return _dbSet.ToList();
     }
 }
