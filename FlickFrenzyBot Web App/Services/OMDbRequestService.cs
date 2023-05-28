@@ -12,8 +12,8 @@ namespace FlickFrenzyBot_Web_App.Services
         private readonly HttpClient _httpClient;
         private readonly string? _apiUrl;
         private readonly string? _apiKey;
-        private readonly BotDbContext _dbContext; 
-        private readonly IMovieRepository _movieRepository; 
+        private readonly BotDbContext _dbContext;
+        private readonly IMovieRepository _movieRepository;
 
         public OMDbRequestService(HttpClient httpClient, IConfiguration configuration, BotDbContext dbContext)
         {
@@ -41,12 +41,9 @@ namespace FlickFrenzyBot_Web_App.Services
             if (movie is null || movie.Response == "False")
                 return (false, null);
 
-            Console.WriteLine(movie.Title);
-            Console.WriteLine(movie.Plot);
-
             var dbMovie = _movieRepository.GetByTitle(movie.Title);
 
-            if ( dbMovie is not null)
+            if (dbMovie is not null)
                 return (true, dbMovie);
 
             _movieRepository.Create(movie);

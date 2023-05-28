@@ -20,6 +20,7 @@ namespace FlickFrenzyBot_Web_App.Services
         private readonly IConfiguration _configuration;
         private readonly IRatingRepository _ratingRepository;
         private readonly IMovieRepository _movieRepository;
+        private readonly IUserRepository _userRepository;
 
         int _currentMovieId = 0;
         int _currentMessageId = 0;
@@ -31,11 +32,14 @@ namespace FlickFrenzyBot_Web_App.Services
             _configuration = configuration;
             _ratingRepository = new RatingRepository(_dbContext);
             _movieRepository = new MovieRepository(_dbContext);
+            _userRepository = new UserRepository(_dbContext);
         }
 
         public async Task HandleMessage(ITelegramBotClient botClient, Message message)
         {
+            if (message is null || message.Text is null) return;
             Console.WriteLine($"Okay, now, I am talking in chat {message.Chat.Id} and the message is: '{message.Text}'");
+
 
             var isCommand = await HandleCommands(botClient, message);
             if (isCommand) return;
@@ -75,8 +79,8 @@ namespace FlickFrenzyBot_Web_App.Services
                         replyToMessageId: message.MessageId,
                         replyMarkup: new InlineKeyboardMarkup(new[]
                         {
-                        InlineKeyboardButton.WithCallbackData("👍", "hello"),
-                        InlineKeyboardButton.WithCallbackData("👎", "bye")
+                        InlineKeyboardButton.WithCallbackData("👍", $"like {movie.Id}"),
+                        InlineKeyboardButton.WithCallbackData("👎", $"dislike {movie.Id}")
                         })
                     );
                     _currentMessageId = sentMessage.MessageId;
@@ -88,6 +92,22 @@ namespace FlickFrenzyBot_Web_App.Services
 
         public async Task HandleCallbackQuery(ITelegramBotClient botClient, CallbackQuery callbackQuery)
         {
+            if (callbackQuery is null || callbackQuery.Data is null || callbackQuery.Message is null) return;
+
+            string[] parts = callbackQuery.Data.Split(' ');
+            int id = int.Parse(parts[1]);
+
+            if (parts[0] == "like")
+            {
+                _ = await SendMessageAsync(botClient, callbackQuery.Message.Chat.Id, $"I'm glad you liked {_movieRepository.GetById(id).Title}", callbackQuery.Message.MessageId);
+                return;
+            }
+            else if (parts[0] == "dislike")
+            {
+                _ = await SendMessageAsync(botClient, callbackQuery.Message.Chat.Id, $"I'm sorry you didn't like {_movieRepository.GetById(id).Title}", callbackQuery.Message.MessageId);
+                return;
+            }
+            return;
         }
 
         private async Task<bool> HandleCommands(ITelegramBotClient botClient, Message message)
@@ -95,6 +115,14 @@ namespace FlickFrenzyBot_Web_App.Services
             if (message.Text == "/start")
             {
                 _ = await SendMessageAsync(botClient, message.Chat.Id, GetConfig("Messages:WelcomeMessage"), message.MessageId);
+
+                if (_userRepository.GetByNickname(message.Chat.Username) is null)
+                {
+                    var user = new Entities.User();
+                    user.Nickname = message.Chat.Username;
+                    _userRepository.Create(user);
+                }
+
                 return true;
             }
 
