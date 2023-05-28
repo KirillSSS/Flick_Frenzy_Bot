@@ -36,11 +36,14 @@ namespace FlickFrenzyBot_Web_App.Services
         public async Task HandleMessage(ITelegramBotClient botClient, Message message)
         {
             Console.WriteLine($"Okay, now, I am talking in chat {message.Chat.Id} and the message is: '{message.Text}'");
+
             var isCommand = await HandleCommands(botClient, message);
+            if (isCommand) return;
 
-            if (isCommand) return; 
+            var correctName = OpenAIRequestService.GetCorrectTitleAsync(message.Text).Result;
+            Console.WriteLine($"OpenAI think that correct title is {correctName}");
 
-            var (isReal, movie) = await _omdbRequestService.GetMovieAsync(message.Text);
+            var (isReal, movie) = await _omdbRequestService.GetMovieAsync(correctName);
 
             if (movie is null)
             {
@@ -54,11 +57,10 @@ namespace FlickFrenzyBot_Web_App.Services
             else
             {
                 _currentMovieId = movie.Id;
+                Console.WriteLine(_currentMovieId);
 
                 if (movie.Ratings is null)
                     movie.Ratings = _ratingRepository.GetAllByMovieId(movie.Id);
-
-                Console.WriteLine(movie.Poster == "N/A");
 
                 if (movie.Poster is null)
                 {
@@ -80,6 +82,8 @@ namespace FlickFrenzyBot_Web_App.Services
                     _currentMessageId = sentMessage.MessageId;
                 }
             }
+
+            Console.WriteLine(_currentMovieId);
         }
 
         public async Task HandleCallbackQuery(ITelegramBotClient botClient, CallbackQuery callbackQuery)
