@@ -2,8 +2,8 @@
 {
     public class OMDbApiOptions
     {
-        public string ApiUrl { get; set; }
-        public string ApiKey { get; set; }
-        public string BadUrl { get; set; }
+        public string? ApiUrl { get; set; } = null;
+        public string? ApiKey { get; set; } = null;
+        public string? BadUrl { get; set; } = null;
     }
 }

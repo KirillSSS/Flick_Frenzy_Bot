@@ -6,28 +6,29 @@ namespace FlickFrenzyBot_Web_App.Entities
     public class Movie
     {
         public int Id { get; set; }
-        public string Title { get; set; }
-        public string Genre { get; set; }
-        public string Rated { get; set; }
-        public string Runtime { get; set; }
-        public string Director { get; set; }
-        public string Actors { get; set; }
-        public string Plot { get; set; }
-        public string Awards { get; set; }
-        public string Released { get; set; }
-        public string Poster { get; set; }
-        public List<Rating> Ratings { get; set; }
-        public List<Review> Reviews { get; }
+        public string Title { get; set; } = "N/A";
+        public string Genre { get; set; } = "N/A";
+        public string Rated { get; set; } = "N/A";
+        public string Runtime { get; set; } = "N/A";
+        public string Director { get; set; } = "N/A";
+        public string Actors { get; set; } = "N/A";
+        public string Plot { get; set; } = "N/A";
+        public string Awards { get; set; } = "N/A";
+        public string Released { get; set; } = "N/A";
+        public string Poster { get; set; } = "N/A";
+        public List<Rating>? Ratings { get; set; }
+        public List<Review>? Reviews { get; }
 
         [NotMapped]
-        public string Response { get; set; }
+        public string Response { get; set; } = "N/A";
 
         public string GetShortInfo()
         {
             var output = $"{Title}: \n\n";
 
-            foreach (var rating in Ratings)
-                output += $"    {rating.Source}: {rating.Value}\n\n";
+            if (Ratings is not null)
+                foreach (var rating in Ratings)
+                    output += $"    {rating.Source}: {rating.Value}\n\n";
 
             return output;
         }
@@ -58,8 +59,9 @@ namespace FlickFrenzyBot_Web_App.Entities
         {
             var output = $"Rating: \n";
 
-            foreach (var rating in Ratings)
-                output += $"{rating.Source}: {rating.Value}\n\n";
+            if (Ratings is not null)
+                foreach (var rating in Ratings)
+                    output += $"{rating.Source}: {rating.Value}\n\n";
 
             output += Awards != "N/A" ? $"Awards: \n{Awards} \n\n" : $"Awards: Sorry, I have no info about it \n\n";
 
