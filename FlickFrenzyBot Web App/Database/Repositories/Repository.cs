@@ -24,8 +24,9 @@ public class Repository<T> : IRepository<T> where T : class
         var entity = _dbSet.Find(id);
         if (entity != null)
         {
-            Delete(entity);  
+            _dbSet.Remove(entity);  
         }
+        _dbContext.SaveChanges();
     }
 
     public void Update(T entity)

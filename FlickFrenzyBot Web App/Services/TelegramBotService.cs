@@ -1,15 +1,9 @@
 ﻿using FlickFrenzyBot_Web_App.Abstractions;
 using FlickFrenzyBot_Web_App.Database;
 using FlickFrenzyBot_Web_App.Database.Repositories;
-using FlickFrenzyBot_Web_App.Entities;
-using System.Threading;
 using Telegram.Bot;
-using Telegram.Bot.Exceptions;
-using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
-using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace FlickFrenzyBot_Web_App.Services
 {
@@ -21,9 +15,6 @@ namespace FlickFrenzyBot_Web_App.Services
         private readonly IRatingRepository _ratingRepository;
         private readonly IMovieRepository _movieRepository;
         private readonly IUserRepository _userRepository;
-
-        int _currentMovieId = 0;
-        int _currentMessageId = 0;
 
         public TelegramBotService(IOMDbRequestService omdbRequestService, BotDbContext dbContext, IConfiguration configuration)
         {
@@ -40,12 +31,11 @@ namespace FlickFrenzyBot_Web_App.Services
             if (message is null || message.Text is null) return;
             Console.WriteLine($"Okay, now, I am talking in chat {message.Chat.Id} and the message is: '{message.Text}'");
 
-
             var isCommand = await HandleCommands(botClient, message);
             if (isCommand) return;
 
             var correctName = OpenAIRequestService.GetCorrectTitleAsync(message.Text).Result;
-            Console.WriteLine($"OpenAI think that correct title is {correctName}");
+            Console.WriteLine($"OpenAI corrected the name. Looking for: {correctName}\n");
 
             var (isReal, movie) = await _omdbRequestService.GetMovieAsync(correctName);
 
@@ -60,8 +50,9 @@ namespace FlickFrenzyBot_Web_App.Services
             }
             else
             {
-                _currentMovieId = movie.Id;
-                Console.WriteLine(_currentMovieId);
+                var user = _userRepository.GetByNickname(message.Chat.Username);
+                user.currentMovieId = movie.Id;
+                _userRepository.Update(user);
 
                 if (movie.Ratings is null)
                     movie.Ratings = _ratingRepository.GetAllByMovieId(movie.Id);
@@ -83,11 +74,10 @@ namespace FlickFrenzyBot_Web_App.Services
                         InlineKeyboardButton.WithCallbackData("👎", $"dislike {movie.Id}")
                         })
                     );
-                    _currentMessageId = sentMessage.MessageId;
+                    user.currentMessageId = sentMessage.MessageId;
+                    _userRepository.Update(user);
                 }
             }
-
-            Console.WriteLine(_currentMovieId);
         }
 
         public async Task HandleCallbackQuery(ITelegramBotClient botClient, CallbackQuery callbackQuery)
@@ -141,53 +131,23 @@ namespace FlickFrenzyBot_Web_App.Services
                 return true;
             }
 
-            if (message.Text == "/detailed")
-            {
-                if (_currentMovieId != 0 && _currentMessageId != 0)
-                    _ = await SendMessageAsync(botClient, message.Chat.Id, _movieRepository.GetById(_currentMovieId).GetCompleteInfo(), _currentMessageId);
-                else
-                    _ = await SendMessageAsync(botClient, message.Chat.Id, "Sorry, but you didn't mention a movie", message.MessageId);
-                return true;
-            }
+            var currentUser = _userRepository.GetByNickname(message.Chat.Username);
+            if (currentUser is null) return false; 
 
-            if (message.Text == "/plot")
-            {
-                if (_currentMovieId != 0 && _currentMessageId != 0)
-                    _ = await SendMessageAsync(botClient, message.Chat.Id, _movieRepository.GetById(_currentMovieId).GetPlotInfo(), _currentMessageId);
-                else
-                    _ = await SendMessageAsync(botClient, message.Chat.Id, "Sorry, but you didn't mention a movie", message.MessageId);
-                return true;
-            }
+            var currentMovieId = currentUser.currentMovieId.GetValueOrDefault();
+            var currentMessageId = currentUser.currentMessageId.GetValueOrDefault();
+            var movie = _movieRepository.GetById(currentMovieId);
+            movie.Ratings = _ratingRepository.GetAllByMovieId(movie.Id);
 
-            if (message.Text == "/filmmakers")
-            {
-                if (_currentMovieId != 0 && _currentMessageId != 0)
-                    _ = await SendMessageAsync(botClient, message.Chat.Id, _movieRepository.GetById(_currentMovieId).GetFilmmakersInfo(), _currentMessageId);
-                else
-                    _ = await SendMessageAsync(botClient, message.Chat.Id, "Sorry, but you didn't mention a movie", message.MessageId);
-                return true;
-            }
+            if (await CheckCommandAsync(botClient, message, "/detailed", movie.GetCompleteInfo(), currentMovieId, currentMessageId)) return true;
 
-            if (message.Text == "/general")
-            {
-                if (_currentMovieId != 0 && _currentMessageId != 0)
-                    _ = await SendMessageAsync(botClient, message.Chat.Id, _movieRepository.GetById(_currentMovieId).GetGeneralInfo(), _currentMessageId);
-                else
-                    _ = await SendMessageAsync(botClient, message.Chat.Id, "Sorry, but you didn't mention a movie", message.MessageId);
-                return true;
-            }
+            if (await CheckCommandAsync(botClient, message, "/plot", movie.GetPlotInfo(), currentMovieId, currentMessageId)) return true;
 
-            if (message.Text == "/awards")
-            {
-                var movie = _movieRepository.GetById(_currentMovieId);
-                movie.Ratings = _ratingRepository.GetAllByMovieId(movie.Id);
+            if (await CheckCommandAsync(botClient, message, "/filmmakers", movie.GetFilmmakersInfo(), currentMovieId, currentMessageId)) return true;
 
-                if (_currentMovieId != 0 && _currentMessageId != 0)
-                    _ = await SendMessageAsync(botClient, message.Chat.Id, _movieRepository.GetById(_currentMovieId).GetAwardsInfo(), _currentMessageId);
-                else
-                    _ = await SendMessageAsync(botClient, message.Chat.Id, "Sorry, but you didn't mention a movie", message.MessageId);
-                return true;
-            }
+            if (await CheckCommandAsync(botClient, message, "/general", movie.GetGeneralInfo(), currentMovieId, currentMessageId)) return true;
+
+            if (await CheckCommandAsync(botClient, message, "/awards", movie.GetAwardsInfo(), currentMovieId, currentMessageId)) return true;
 
             return false;
         }
@@ -201,6 +161,19 @@ namespace FlickFrenzyBot_Web_App.Services
             );
 
             return sentMessage.MessageId;
+        }
+
+        private async Task<bool> CheckCommandAsync(ITelegramBotClient botClient, Message message, string command, string infoType, int currentMovieId, int currentMessageId)
+        {
+            if (message.Text == command)
+            {
+                if (currentMovieId != 0 && currentMessageId != 0)
+                    _ = await SendMessageAsync(botClient, message.Chat.Id, infoType, currentMessageId);
+                else
+                    _ = await SendMessageAsync(botClient, message.Chat.Id, "Sorry, but you didn't mention a movie", message.MessageId);
+                return true;
+            }
+            return false;
         }
 
         private string GetConfig(string parameter)
