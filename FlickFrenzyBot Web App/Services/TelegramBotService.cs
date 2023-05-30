@@ -13,10 +13,12 @@ namespace FlickFrenzyBot_Web_App.Services
         private readonly IOMDbRequestService _omdbRequestService;
         private readonly BotDbContext _dbContext;
         private readonly IConfiguration _configuration;
+
         private readonly IRatingRepository _ratingRepository;
         private readonly IMovieRepository _movieRepository;
         private readonly IUserRepository _userRepository;
         private readonly IReviewRepository _reviewRepository;
+        private readonly IStateRepository _stateRepository;
 
         public TelegramBotService(IOMDbRequestService omdbRequestService, BotDbContext dbContext, IConfiguration configuration)
         {
@@ -27,6 +29,7 @@ namespace FlickFrenzyBot_Web_App.Services
             _movieRepository = new MovieRepository(_dbContext);
             _userRepository = new UserRepository(_dbContext);
             _reviewRepository = new ReviewRepository(_dbContext);
+            _stateRepository = new StateRepository(_dbContext);
         }
 
         public async Task HandleMessage(ITelegramBotClient botClient, Message message)
@@ -53,9 +56,9 @@ namespace FlickFrenzyBot_Web_App.Services
             }
             else
             {
-                var user = _userRepository.GetByNickname(message.Chat.Username);
-                user.currentMovieId = movie.Id;
-                _userRepository.Update(user);
+                var state = _stateRepository.GetByUserId(_userRepository.GetIdByNickname(message.Chat.Username ?? message.Chat.Id.ToString()));
+                state.currentMovieId = movie.Id;
+                _stateRepository.Update(state);
 
                 if (movie.Ratings is null)
                     movie.Ratings = _ratingRepository.GetAllByMovieId(movie.Id);
@@ -77,8 +80,8 @@ namespace FlickFrenzyBot_Web_App.Services
                         InlineKeyboardButton.WithCallbackData("👎", $"dislike {movie.Id}")
                         })
                     );
-                    user.currentMessageId = sentMessage.MessageId;
-                    _userRepository.Update(user);
+                    state.currentMessageId = sentMessage.MessageId;
+                    _stateRepository.Update(state);
                 }
             }
         }
@@ -90,7 +93,7 @@ namespace FlickFrenzyBot_Web_App.Services
             string[] parts = callbackQuery.Data.Split(' ');
             int id = int.Parse(parts[1]);
 
-            var currentUser = _userRepository.GetByNickname(callbackQuery.Message.Chat.Username);
+            var currentUser = _userRepository.GetByNickname(callbackQuery.Message.Chat.Username ?? callbackQuery.Message.Chat.Id.ToString());
             if (currentUser is null) return;
 
             var review = _reviewRepository.GetByIds(currentUser.Id, id);
@@ -123,11 +126,15 @@ namespace FlickFrenzyBot_Web_App.Services
             {
                 _ = await SendMessageAsync(botClient, message.Chat.Id, GetConfig("Messages:WelcomeMessage"), message.MessageId);
 
-                if (_userRepository.GetByNickname(message.Chat.Username) is null)
+                if (_userRepository.GetByNickname(message.Chat.Username ?? message.Chat.Id.ToString()) is null)
                 {
                     var user = new Entities.User();
-                    user.Nickname = message.Chat.Username;
+                    user.Nickname = message.Chat.Username ?? message.Chat.Id.ToString();
                     _userRepository.Create(user);
+
+                    var state = new Entities.CurrentState();
+                    state.UserId = _userRepository.GetIdByNickname(message.Chat.Username ?? message.Chat.Id.ToString());
+                    _stateRepository.Create(state);
                 }
 
                 return true;
@@ -148,11 +155,11 @@ namespace FlickFrenzyBot_Web_App.Services
                 return true;
             }
 
-            var currentUser = _userRepository.GetByNickname(message.Chat.Username);
-            if (currentUser is null) return false; 
+            var currentState = _stateRepository.GetByUserId(_userRepository.GetIdByNickname(message.Chat.Username ?? message.Chat.Id.ToString()));
+            if (currentState is null || currentState.currentMovieId is null || currentState.currentMessageId is null) return false; 
 
-            var currentMovieId = currentUser.currentMovieId.GetValueOrDefault();
-            var currentMessageId = currentUser.currentMessageId.GetValueOrDefault();
+            var currentMovieId = currentState.currentMovieId.GetValueOrDefault();
+            var currentMessageId = currentState.currentMessageId.GetValueOrDefault();
             var movie = _movieRepository.GetById(currentMovieId);
             movie.Ratings = _ratingRepository.GetAllByMovieId(movie.Id);
 

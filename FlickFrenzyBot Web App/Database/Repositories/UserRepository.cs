@@ -13,5 +13,12 @@ namespace FlickFrenzyBot_Web_App.Database.Repositories
         {
             return _dbSet.FirstOrDefault(e => e.Nickname == nickname);
         }
+
+        public int GetIdByNickname(string nickname)
+        {
+            var user = _dbSet.FirstOrDefault(e => e.Nickname == nickname);
+            if (user is null) return default(int);
+            else return user.Id;
+        }
     }
 }

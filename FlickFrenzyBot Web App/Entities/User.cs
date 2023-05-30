@@ -10,7 +10,5 @@
         public int? Gender { get; set; }
         public Recommendation? Recommendation { get; set; }
         public List<Review>? Reviews { get; set; }
-        public int? currentMovieId { get; set; } = null;
-        public int? currentMessageId { get; set; } = null;
     }
 }

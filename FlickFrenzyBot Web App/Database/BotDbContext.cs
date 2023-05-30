@@ -23,5 +23,6 @@ namespace FlickFrenzyBot_Web_App.Database
         public DbSet<User> Users { get; set; }
         public DbSet<Review> Reviews { get; set; }
         public DbSet<Recommendation> Recommendations { get; set; }
+        public DbSet<CurrentState> CurrentStates { get; set; }
     }
 }
