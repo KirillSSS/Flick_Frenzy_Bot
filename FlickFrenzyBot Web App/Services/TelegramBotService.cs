@@ -37,12 +37,33 @@ namespace FlickFrenzyBot_Web_App.Services
             if (message is null || message.Text is null) return;
             Console.WriteLine($"Okay, now, I am talking in chat {message.Chat.Id} and the message is: '{message.Text}'");
 
+            var userId = _userRepository.GetIdByNickname(message.Chat.Username ?? message.Chat.Id.ToString());
+            var state = _stateRepository.GetByUserId(userId);
+
+            if (state.currentMessageType == "review")
+            {
+                var review = _reviewRepository.GetByIds(userId, state.currentMovieId.GetValueOrDefault());
+                if (review is null)
+                {
+                    review = new Review(userId, state.currentMovieId.GetValueOrDefault());
+                    _reviewRepository.Create(review);
+                }
+
+                review.Comment = message.Text;
+                _reviewRepository.Update(review);
+
+                state.currentMessageType = "N/A";
+                _stateRepository.Update(state);
+
+                _ = await SendMessageAsync(botClient, message.Chat.Id, $"Thanks for your review, I will save it", message.MessageId);
+                return;
+            }
+
             var isCommand = await HandleCommands(botClient, message);
             if (isCommand) return;
 
-            var correctName = OpenAIRequestService.GetCorrectTitleAsync(message.Text).Result;
+            var correctName = await OpenAIRequestService.GetCorrectTitleAsync(message.Text);
             Console.WriteLine($"OpenAI corrected the name. Looking for: {correctName}\n");
-
             var (isReal, movie) = await _omdbRequestService.GetMovieAsync(correctName);
 
             if (movie is null)
@@ -56,7 +77,6 @@ namespace FlickFrenzyBot_Web_App.Services
             }
             else
             {
-                var state = _stateRepository.GetByUserId(_userRepository.GetIdByNickname(message.Chat.Username ?? message.Chat.Id.ToString()));
                 state.currentMovieId = movie.Id;
                 _stateRepository.Update(state);
 
@@ -76,8 +96,15 @@ namespace FlickFrenzyBot_Web_App.Services
                         replyToMessageId: message.MessageId,
                         replyMarkup: new InlineKeyboardMarkup(new[]
                         {
-                        InlineKeyboardButton.WithCallbackData("👍", $"like {movie.Id}"),
-                        InlineKeyboardButton.WithCallbackData("👎", $"dislike {movie.Id}")
+                            new[]
+                            {
+                                InlineKeyboardButton.WithCallbackData("👍", $"like {movie.Id}"),
+                                InlineKeyboardButton.WithCallbackData("👎", $"dislike {movie.Id}")
+                            }, 
+                            new[]
+                            {
+                                InlineKeyboardButton.WithCallbackData("Add a review", $"review {movie.Id}")
+                            }
                         })
                     );
                     state.currentMessageId = sentMessage.MessageId;
@@ -117,6 +144,14 @@ namespace FlickFrenzyBot_Web_App.Services
                 _reviewRepository.Update(review);
                 return;
             }
+            else if (parts[0] == "review")
+            {
+                _ = await SendMessageAsync(botClient, callbackQuery.Message.Chat.Id, $"Great, now write your review about {_movieRepository.GetById(id).Title}", callbackQuery.Message.MessageId);
+                var currentState = _stateRepository.GetByUserId(currentUser.Id);
+                currentState.currentMessageType = "review";
+                _stateRepository.Update(currentState);
+                return;
+            }
             return;
         }
 
@@ -136,7 +171,6 @@ namespace FlickFrenzyBot_Web_App.Services
                     state.UserId = _userRepository.GetIdByNickname(message.Chat.Username ?? message.Chat.Id.ToString());
                     _stateRepository.Create(state);
                 }
-
                 return true;
             }
 
