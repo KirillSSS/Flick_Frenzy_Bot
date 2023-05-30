@@ -9,5 +9,11 @@
         public Movie? Movie { get; set; }
         public string Comment { get; set; } = "N/A";
         public string Score { get; set; } = "N/A";
+
+        public Review(int userId, int movieId)
+        { 
+            UserId = userId;
+            MovieId = movieId;
+        }
     }
 }

@@ -1,6 +1,7 @@
 ﻿using FlickFrenzyBot_Web_App.Abstractions;
 using FlickFrenzyBot_Web_App.Database;
 using FlickFrenzyBot_Web_App.Database.Repositories;
+using FlickFrenzyBot_Web_App.Entities;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.ReplyMarkups;
@@ -15,6 +16,7 @@ namespace FlickFrenzyBot_Web_App.Services
         private readonly IRatingRepository _ratingRepository;
         private readonly IMovieRepository _movieRepository;
         private readonly IUserRepository _userRepository;
+        private readonly IReviewRepository _reviewRepository;
 
         public TelegramBotService(IOMDbRequestService omdbRequestService, BotDbContext dbContext, IConfiguration configuration)
         {
@@ -24,6 +26,7 @@ namespace FlickFrenzyBot_Web_App.Services
             _ratingRepository = new RatingRepository(_dbContext);
             _movieRepository = new MovieRepository(_dbContext);
             _userRepository = new UserRepository(_dbContext);
+            _reviewRepository = new ReviewRepository(_dbContext);
         }
 
         public async Task HandleMessage(ITelegramBotClient botClient, Message message)
@@ -87,14 +90,28 @@ namespace FlickFrenzyBot_Web_App.Services
             string[] parts = callbackQuery.Data.Split(' ');
             int id = int.Parse(parts[1]);
 
+            var currentUser = _userRepository.GetByNickname(callbackQuery.Message.Chat.Username);
+            if (currentUser is null) return;
+
+            var review = _reviewRepository.GetByIds(currentUser.Id, id);
+            if (review is null)
+            { 
+                review = new Review(currentUser.Id, id);
+                _reviewRepository.Create(review);
+            }
+
             if (parts[0] == "like")
             {
                 _ = await SendMessageAsync(botClient, callbackQuery.Message.Chat.Id, $"I'm glad you liked {_movieRepository.GetById(id).Title}", callbackQuery.Message.MessageId);
+                review.Score = "like";
+                _reviewRepository.Update(review);
                 return;
             }
             else if (parts[0] == "dislike")
             {
                 _ = await SendMessageAsync(botClient, callbackQuery.Message.Chat.Id, $"I'm sorry you didn't like {_movieRepository.GetById(id).Title}", callbackQuery.Message.MessageId);
+                review.Score = "dislike";
+                _reviewRepository.Update(review);
                 return;
             }
             return;

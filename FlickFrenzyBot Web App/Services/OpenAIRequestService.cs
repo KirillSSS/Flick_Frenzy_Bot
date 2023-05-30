@@ -5,7 +5,7 @@ namespace FlickFrenzyBot_Web_App.Services
 {
     public class OpenAIRequestService
     {
-        private const string apiKey = "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";
+        private const string apiKey = "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";
 
         public static async Task<string> GetCorrectTitleAsync(string prompt)
         {
